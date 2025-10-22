@@ -1,0 +1,74 @@
+name: Release port-forwarding-server
+
+on:
+  push:
+    tags:
+      - "v*"
+    # branches:
+    #   - main
+    # paths:
+    #   - 'server/**'
+
+permissions:
+  contents: write # Needed for creating a GitHub Release
+
+defaults:
+  run:
+    working-directory: server
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    strategy:
+      matrix:
+        arch: [amd64, arm64]
+
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version: "1.25.3"
+          cache-dependency-path: server/go.sum
+
+      - name: Set Go env variables and build
+        run: |
+          GOOS=linux GOARCH=${{ matrix.arch }} go build -o port-forwarding-server .
+
+      - name: Compress binary and define archive name
+        run: |
+          if [ "${{ matrix.arch }}" = "amd64" ]; then
+            arch_name="x64"
+          elif [ "${{ matrix.arch }}" = "arm64" ]; then
+            arch_name="arm64"
+          else
+            arch_name="${{ matrix.arch }}"
+          fi
+
+          archive_name="port-forwarding-server-linux-$arch_name.tar.gz"
+          tar czf $archive_name port-forwarding-server
+
+          echo "ARCHIVE=$archive_name" >> $GITHUB_ENV
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ARCHIVE }}
+          path: server/${{ env.ARCHIVE }}
+          if-no-files-found: error
+
+  release:
+    needs: build
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v5
+        with:
+          path: ./builds
+          merge-multiple: true
+
+      - name: Create GitHub Release and upload binaries
+        uses: softprops/action-gh-release@v2
+        with:
+          files: builds/*
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
