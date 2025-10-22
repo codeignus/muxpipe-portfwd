@@ -1,0 +1,41 @@
+{
+	"image": "mcr.microsoft.com/devcontainers/typescript-node:24-bookworm",
+	"features": {
+		"ghcr.io/devcontainers/features/go:1": {},
+		"ghcr.io/devcontainers-extra/features/pnpm:2": {}
+	},
+	"containerEnv": {
+		"TZ": "PST8PDT"
+	},
+	"customizations": {
+		"vscode": {
+			"extensions": [
+				"golang.go",
+				"biomejs.biome", //Biome
+				"cardinal90.multi-cursor-case-preserve", //Multi Cursor Case Preserve
+				"fill-labs.dependi", //Dependi
+				// Extensions from template
+				"dbaeumer.vscode-eslint",
+				"connor4312.esbuild-problem-matchers",
+				"ms-vscode.extension-test-runner"
+			],
+			"settings": {
+				"typescript.tsserver.experimental.enableProjectDiagnostics": false,
+				"[typescript]": {
+					"editor.defaultFormatter": "biomejs.biome"
+				},
+				"[json]": {
+					"editor.defaultFormatter": "biomejs.biome"
+				},
+				"[go]": {
+					"editor.defaultFormatter": "golang.go"
+				},
+				"editor.codeActionsOnSave": {
+					"source.organizeImports.biome": "always",
+					"source.fixAll.biome": "always"
+				}
+			}
+		}
+	},
+	"shutdownAction": "stopContainer"
+}
