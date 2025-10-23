@@ -11,7 +11,7 @@ describe("OutgoingStream", () => {
 		const args = ["run", "."];
 		const cwd = "server";
 
-		const forwarder = await portForwarder(cmd, args, cwd);
+		const forwarder = await portForwarder({ cmd, args, cwd });
 		expect(forwarder).toBeTruthy();
 
 		// biome-ignore lint/suspicious/noExplicitAny: <Accessing private property for testing purposes>

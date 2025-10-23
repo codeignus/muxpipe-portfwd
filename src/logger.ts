@@ -1,4 +1,13 @@
+/** biome-ignore-all lint/suspicious/noExplicitAny: <Logger args are of type any[] for most logger libraries> */
 import pino from "pino";
+
+export interface Logger {
+	info(message: string, ...args: any[]): void;
+	warn(message: string, ...args: any[]): void;
+	error(error: string | Error, ...args: any[]): void;
+	debug?(message: string, ...args: any[]): void;
+	trace?(message: string, ...args: any[]): void;
+}
 
 const timestamp = () => {
 	const now = new Date();
@@ -10,7 +19,7 @@ const timestamp = () => {
 	return `,"time":"${dateStr}"`;
 };
 
-const logger = pino({
+export const pinoLogger = pino({
 	level: process.env.PINO_LOG_LEVEL || "info",
 	base: { source: "client" },
 	timestamp,
@@ -27,5 +36,3 @@ const logger = pino({
 		},
 	},
 });
-
-export default logger;

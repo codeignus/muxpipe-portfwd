@@ -2,9 +2,10 @@ import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
 
 import { Client, type Stream } from "yamux-js";
 
-import logger from "./logger.js";
+import type { Logger } from "./logger";
 
 export function getYamuxSession(
+	logger: Logger,
 	childProc: ChildProcessWithoutNullStreams,
 	handleIncomingStream: (stream: Stream) => void,
 ) {
@@ -26,6 +27,7 @@ export function getYamuxSession(
  * asynchronus so that it blocks until server is ready
  */
 export async function childProcSetup(
+	logger: Logger,
 	cmd: string,
 	args?: string[],
 	cwd?: string,
@@ -62,12 +64,12 @@ export async function childProcSetup(
 				}
 
 				if (jsonLog.source === "server") {
-					console.error(`${dataStr}`); // Log server logs to stderr, avoid wrapping with pino
+					logger.error(`${dataStr}`); // Log server logs to stderr, avoid wrapping with pino
 				} else {
 					logger.info(`${dataStr}`);
 				}
 			} catch (_) {
-				console.error(`${dataStr}`);
+				logger.error(`${dataStr}`);
 			}
 		});
 	});

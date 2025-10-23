@@ -3,7 +3,8 @@ import * as net from "node:net";
 
 import type { Client, Stream } from "yamux-js";
 
-import logger from "./logger.js";
+import type { PortForwarderOptions } from "./index.js";
+import type { Logger } from "./logger.js";
 import { childProcSetup, getYamuxSession } from "./stdioPipe.js";
 
 type ForwardPortParams =
@@ -11,32 +12,48 @@ type ForwardPortParams =
 	| { localPort?: number; remoteUnixPath: string; remotePort?: never };
 
 export class PortForwarder {
+	private logger: Logger;
 	private yamuxSession: Client;
 	private servers: Map<number | string, net.Server>;
 
-	private constructor(childProc: ChildProcessWithoutNullStreams) {
+	private constructor(
+		options: PortForwarderOptions,
+		childProc: ChildProcessWithoutNullStreams,
+	) {
+		this.logger = options.logger;
 		this.servers = new Map();
-		this.yamuxSession = getYamuxSession(childProc, this.handleIncomingStream);
+		this.yamuxSession = getYamuxSession(
+			this.logger,
+			childProc,
+			this.handleIncomingStream,
+		);
 	}
 
-	static async _init(cmd: string, args?: string[], cwd?: string) {
-		const childProc = await childProcSetup(cmd, args, cwd);
-		return new PortForwarder(childProc);
+	static async _init(
+		options: PortForwarderOptions,
+		cmd: string,
+		args?: string[],
+		cwd?: string,
+	) {
+		const childProc = await childProcSetup(options.logger, cmd, args, cwd);
+		return new PortForwarder(options, childProc);
 	}
 
 	private handleIncomingStream = (stream: Stream): void => {
 		stream.on("error", (err: Error) => {
-			logger.error(`[Stream ${stream.ID()}] error: ${err.message}`);
+			this.logger.error(`[Stream ${stream.ID()}] error: ${err.message}`);
 		});
 
 		stream.on("close", () => {
-			logger.info(`[Stream ${stream.ID()}] closed`);
+			this.logger.info(`[Stream ${stream.ID()}] closed`);
 		});
 
-		logger.info(`Incoming stream accepted from server (ID: ${stream.ID()})`);
+		this.logger.info(
+			`Incoming stream accepted from server (ID: ${stream.ID()})`,
+		);
 
 		stream.on("data", (data: Buffer) => {
-			logger.info(`[Stream ${stream.ID()}] Received: ${data.toString()}`);
+			this.logger.info(`[Stream ${stream.ID()}] Received: ${data.toString()}`);
 			// Echo back or handle as needed
 			// stream.write(`Client acknowledged: ${data.toString()}`);
 		});
@@ -55,7 +72,7 @@ export class PortForwarder {
 
 		return new Promise((resolve, reject) => {
 			const server = net.createServer(async (socket) => {
-				logger.info(`Opening stream for remote ${destination}`);
+				this.logger.info(`Opening stream for remote ${destination}`);
 				// Open a new yamux stream
 				const stream = await this.yamuxSession.openStream();
 
@@ -67,32 +84,34 @@ export class PortForwarder {
 
 				// Handle errors
 				stream.on("error", (err) => {
-					logger.error(
+					this.logger.error(
 						`Stream error for remote ${destination}: ${err.message}`,
 					);
 					socket.end();
 				});
 
 				socket.on("error", (err) => {
-					logger.error(
+					this.logger.error(
 						`Client socket error for remote ${destination}: ${err.message}`,
 					);
 					stream.end();
 				});
 
 				stream.on("close", () => {
-					logger.info(`Stream closed for remote ${destination}`);
+					this.logger.info(`Stream closed for remote ${destination}`);
 					socket.end();
 				});
 
 				socket.on("close", () => {
-					logger.info(`Client socket disconnected for remote ${destination}`);
+					this.logger.info(
+						`Client socket disconnected for remote ${destination}`,
+					);
 					stream.end();
 				});
 			});
 
 			server.on("error", (err) => {
-				logger.error(
+				this.logger.error(
 					`net.createServer error for remote ${destination}: ${err.message}`,
 				);
 				reject(err);
@@ -101,7 +120,7 @@ export class PortForwarder {
 			server.listen(_params.localPort ?? 0, "127.0.0.1", () => {
 				const serverListeningOnPort = (server.address() as net.AddressInfo)
 					.port;
-				logger.info(`Listening on 127.0.0.1:${serverListeningOnPort}`);
+				this.logger.info(`Listening on 127.0.0.1:${serverListeningOnPort}`);
 				this.servers.set(
 					"remotePort" in _params ? _params.remotePort : _params.remoteUnixPath,
 					server,
