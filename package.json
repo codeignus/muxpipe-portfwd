@@ -3,18 +3,24 @@
 	"version": "0.1.0-alpha",
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/codeignus/port-forwarding.git"
+		"url": "https://github.com/codeignus/port-forwarding.git"
 	},
 	"author": "codeignus",
-	"main": "dist/index",
+	"main": "dist/index.js",
 	"types": "dist/index.d.ts",
-	"type": "module",
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"default": "./dist/index.js"
+		}
+	},
+	"type": "commonjs",
 	"files": [
 		"dist"
 	],
 	"scripts": {
-		"build": "pnpm clean && pnpm tsc",
-		"clean": "rimraf dist",
+		"build": "pnpm tsc",
+		"clean": "rimraf dist node_modules",
 		"format": "pnpm biome format --write",
 		"format:check": "pnpm biome format",
 		"prepare": "pnpm format:check && pnpm lint && pnpm build",
@@ -31,6 +37,6 @@
 	},
 	"dependencies": {
 		"pino": "^10.1.0",
-		"yamux-js": "git+https://github.com/codeignus/yamux-js.git"
+		"yamux-js": "github:codeignus/yamux-js"
 	}
 }

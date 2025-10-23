@@ -12,7 +12,7 @@ importers:
         specifier: ^10.1.0
         version: 10.1.0
       yamux-js:
-        specifier: git+https://github.com/codeignus/yamux-js.git
+        specifier: github:codeignus/yamux-js
         version: https://codeload.github.com/codeignus/yamux-js/tar.gz/f83b5a50a778e765408a830c3093ced7f00cb5d2
     devDependencies:
       '@biomejs/biome':
