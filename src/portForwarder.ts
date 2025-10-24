@@ -76,38 +76,35 @@ export class PortForwarder {
 				// Open a new yamux stream
 				const stream = await this.yamuxSession.openStream();
 
-				// Send the target port or socket path as the first message
-				stream.write(JSON.stringify(message));
-
-				// Set up bidirectional forwarding
-				socket.pipe(stream).pipe(socket);
-
 				// Handle errors
 				stream.on("error", (err) => {
 					this.logger.error(
 						`Stream error for remote ${destination}: ${err.message}`,
 					);
-					socket.end();
+					socket.destroy();
 				});
 
 				socket.on("error", (err) => {
 					this.logger.error(
 						`Client socket error for remote ${destination}: ${err.message}`,
 					);
-					stream.end();
+					stream.destroy();
 				});
 
-				stream.on("close", () => {
-					this.logger.info(`Stream closed for remote ${destination}`);
-					socket.end();
+				// Send the target port or socket path as the first message
+				stream.write(JSON.stringify(message));
+
+				// Wait for server to acknowledge it's mirror in go: stream.Write([]byte("OK")) to avoid racing between pipe and first message
+				// Now it only sets pipe after server sends acknowledgement and data is buffered not lost until then
+				stream.once("data", () => {
+					// Now pipe, set up bidirectional forwarding
+					socket.pipe(stream).pipe(socket);
 				});
 
-				socket.on("close", () => {
-					this.logger.info(
-						`Client socket disconnected for remote ${destination}`,
-					);
-					stream.end();
-				});
+				// when client connected calls end on client, pipe calls end on stream -> when stream ends pipe calls end on socket
+				// So socket got end from client(remote) and pipe(local) so socket is completely closed
+				// pipe(local) calls stream end so finish is triggered on stream while waiting for end to be triggered by remote server,
+				// and on both finish and end will stream be completely closed
 			});
 
 			server.on("error", (err) => {

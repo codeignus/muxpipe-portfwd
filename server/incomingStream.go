@@ -48,6 +48,12 @@ func handleIncomingStream(stream *yamux.Stream) {
 	}
 	defer conn.Close()
 
+	// To avoid racing between first message and client pipe, client waits until it receives this acknowledgement
+	if _, err := stream.Write([]byte("OK")); err != nil {
+		logger.Error().Err(err).Msg("Failed to send OK to client")
+		return
+	}
+
 	// Set up bidirectional forwarding with WaitGroup
 	var wg sync.WaitGroup
 
@@ -56,13 +62,15 @@ func handleIncomingStream(stream *yamux.Stream) {
 		if _, err := io.Copy(dst, src); err != nil && err != io.EOF {
 			logger.Error().Err(err).Msg("Copy error")
 		}
-		// Close the write side to signal EOF
-		if closer, ok := dst.(interface{ CloseWrite() error }); ok {
-			closer.CloseWrite()
+		// Only close write side, don't close stream itself
+		if tcpConn, ok := dst.(*net.TCPConn); ok {
+			tcpConn.CloseWrite()
 		}
 	}
 
 	wg.Add(2)
+
+	// Independent go routines there is no first
 	go cp(conn, stream)
 	go cp(stream, conn)
 
