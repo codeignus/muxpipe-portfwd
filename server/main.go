@@ -47,7 +47,7 @@ func main() {
 	}()
 
 	// Start port detector
-	portDetector := newPortDetector(5*time.Second, logger)
+	portDetector := newPortDetector(2*time.Second, logger)
 	go portDetector.Start()
 
 	// Select loop to coordinate events
