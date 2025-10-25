@@ -1,4 +1,4 @@
-module github.com/codeignus/port-forwarding/server
+module github.com/codeignus/muxpipe-portfwd/server
 
 go 1.25.3
 

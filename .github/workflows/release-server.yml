@@ -1,4 +1,4 @@
-name: Release port-forwarding-server
+name: Release muxpipe-portfwd-server
 
 on:
   push:
@@ -32,7 +32,7 @@ jobs:
 
       - name: Set Go env variables and build
         run: |
-          GOOS=linux GOARCH=${{ matrix.arch }} go build -o port-forwarding-server .
+          GOOS=linux GOARCH=${{ matrix.arch }} go build -o muxpipe-portfwd-server .
 
       - name: Compress binary and define archive name
         run: |
@@ -44,8 +44,8 @@ jobs:
             arch_name="${{ matrix.arch }}"
           fi
 
-          archive_name="port-forwarding-server-linux-$arch_name.tar.gz"
-          tar czf $archive_name port-forwarding-server
+          archive_name="muxpipe-portfwd-server-linux-$arch_name.tar.gz"
+          tar czf $archive_name muxpipe-portfwd-server
 
           echo "ARCHIVE=$archive_name" >> $GITHUB_ENV
 

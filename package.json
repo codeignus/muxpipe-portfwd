@@ -1,9 +1,9 @@
 {
-	"name": "port-forwarding",
-	"version": "0.1.0-alpha",
+	"name": "muxpipe-portfwd",
+	"version": "0.1.0-pre",
 	"repository": {
 		"type": "git",
-		"url": "https://github.com/codeignus/port-forwarding.git"
+		"url": "https://github.com/codeignus/muxpipe-portfwd.git"
 	},
 	"author": "codeignus",
 	"main": "dist/index.js",
