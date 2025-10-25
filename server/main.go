@@ -33,13 +33,13 @@ func main() {
 
 	// Accept streams in a goroutine
 	streamChan := make(chan *yamux.Stream)
-	errChan := make(chan error, 1)
+	streamErrChan := make(chan error, 1)
 
 	go func() {
 		for {
 			stream, err := session.AcceptStream()
 			if err != nil {
-				errChan <- err
+				streamErrChan <- err
 				return
 			}
 			streamChan <- stream
@@ -53,7 +53,7 @@ func main() {
 			logger.Info().Msg("New stream accepted")
 			go handleIncomingStream(stream)
 
-		case err := <-errChan:
+		case err := <-streamErrChan:
 			if err != io.EOF {
 				logger.Error().Err(err).Msg("Error accepting stream")
 			}
