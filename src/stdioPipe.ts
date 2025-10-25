@@ -1,13 +1,12 @@
 import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
 
-import { Client, type Stream } from "yamux-js";
+import { Client } from "yamux-js";
 
 import type { Logger } from "./logger";
 
-export function getYamuxSession(
+export async function getYamuxSession(
 	logger: Logger,
 	childProc: ChildProcessWithoutNullStreams,
-	handleIncomingStream: (stream: Stream) => void,
 ) {
 	const yamuxSession = new Client();
 	childProc.stdout.pipe(yamuxSession).pipe(childProc.stdin);
@@ -16,9 +15,22 @@ export function getYamuxSession(
 		logger.error(`Session error: ${err.message}`);
 	});
 
-	yamuxSession.onIncomingStream = handleIncomingStream;
-
 	logger.info(`Client Session created with bidirectional support`);
+
+	// Verify server is ready by pinging
+	for (let i = 0; i < 100; i++) {
+		await new Promise((resolve) => setTimeout(resolve, 20));
+		try {
+			// biome-ignore lint/suspicious/noExplicitAny: <Accessing private method for session verification>
+			await (yamuxSession as any).ping();
+			logger.info("Server session verified ready via ping");
+			break;
+		} catch (_) {
+			if (i === 99) {
+				throw new Error("Could not verify server session readiness via ping");
+			}
+		}
+	}
 
 	return yamuxSession;
 }
@@ -26,7 +38,7 @@ export function getYamuxSession(
 /**
  * asynchronus so that it blocks until server is ready
  */
-export async function childProcSetup(
+export function childProcSetup(
 	logger: Logger,
 	cmd: string,
 	args?: string[],
@@ -49,28 +61,19 @@ export async function childProcSetup(
 		logger.error(`Child process Stdout error: ${err.message}`);
 	});
 
-	return new Promise<ChildProcessWithoutNullStreams>((resolve) => {
-		childProc.stderr.on("data", (data) => {
-			const dataStr = data.toString();
-			try {
-				const jsonLog = JSON.parse(dataStr);
-				// Wait for server to be ready
-				if (
-					jsonLog.source === "server" &&
-					jsonLog.message ===
-						"Session is created & Server is ready to accept streams"
-				) {
-					resolve(childProc);
-				}
-
-				if (jsonLog.source === "server") {
-					logger.error(`${dataStr}`); // Log server logs to stderr, avoid wrapping with pino
-				} else {
-					logger.info(`${dataStr}`);
-				}
-			} catch (_) {
-				logger.error(`${dataStr}`);
+	childProc.stderr.on("data", (data) => {
+		const dataStr = data.toString();
+		try {
+			const jsonLog = JSON.parse(dataStr);
+			if (jsonLog.source === "server") {
+				logger.error(`${dataStr}`); // Log server logs to stderr, avoid wrapping with pino
+			} else {
+				logger.info(`${dataStr}`);
 			}
-		});
+		} catch (_) {
+			logger.error(`${dataStr}`);
+		}
 	});
+
+	return childProc;
 }

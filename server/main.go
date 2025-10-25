@@ -95,6 +95,19 @@ func createYamuxSession() *yamux.Session {
 
 	logger.Info().Msg("Session is created & Server is ready to accept streams")
 
+	// Wait for client to be ready by pinging
+	for i := range 100 {
+		time.Sleep(20 * time.Millisecond)
+		_, err := session.Ping()
+		if err == nil {
+			logger.Info().Msg("Client session verified ready via ping")
+			break
+		}
+		if i == 99 {
+			logger.Fatal().Err(err).Msg("Failed to verify client readiness via ping")
+		}
+	}
+
 	return session
 }
 

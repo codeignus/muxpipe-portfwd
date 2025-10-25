@@ -1,4 +1,3 @@
-import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import * as net from "node:net";
 
 import type { Client, Stream } from "yamux-js";
@@ -16,17 +15,11 @@ export class PortForwarder {
 	private yamuxSession: Client;
 	private servers: Map<number | string, net.Server>;
 
-	private constructor(
-		options: PortForwarderOptions,
-		childProc: ChildProcessWithoutNullStreams,
-	) {
+	private constructor(options: PortForwarderOptions, yamuxSession: Client) {
 		this.logger = options.logger;
 		this.servers = new Map();
-		this.yamuxSession = getYamuxSession(
-			this.logger,
-			childProc,
-			this.handleIncomingStream,
-		);
+		this.yamuxSession = yamuxSession;
+		this.yamuxSession.onIncomingStream = this.handleIncomingStream;
 	}
 
 	static async _init(
@@ -35,8 +28,9 @@ export class PortForwarder {
 		args?: string[],
 		cwd?: string,
 	) {
-		const childProc = await childProcSetup(options.logger, cmd, args, cwd);
-		return new PortForwarder(options, childProc);
+		const childProc = childProcSetup(options.logger, cmd, args, cwd);
+		const yamuxSession = await getYamuxSession(options.logger, childProc);
+		return new PortForwarder(options, yamuxSession);
 	}
 
 	private handleIncomingStream = (stream: Stream): void => {

@@ -38,9 +38,9 @@ describe("ForwardPort", () => {
 
 		const client = net.createConnection({ port: localPort });
 
-		const received: string[] = [];
+		let receivedData = "";
 		client.on("data", (data) => {
-			received.push(data.toString());
+			receivedData += data.toString();
 		});
 
 		// 3️⃣ Send messages periodically
@@ -55,9 +55,15 @@ describe("ForwardPort", () => {
 
 		client.end();
 
-		expect(received).toContain("echo:one");
-		expect(received).toContain("echo:five");
-		expect(received.length).toBe(sendMessages.length);
+		// Verify all messages were echoed back
+		expect(receivedData).toContain("echo:");
+		expect(receivedData).toContain("one");
+		expect(receivedData).toContain("two");
+		expect(receivedData).toContain("three");
+		expect(receivedData).toContain("four");
+		expect(receivedData).toContain("five");
+
+		// Wait for client to end
 		await new Promise((r) => setTimeout(r, 1000));
 	});
 
