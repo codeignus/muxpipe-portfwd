@@ -1,3 +1,4 @@
+import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import * as net from "node:net";
 
 import type { Client, Stream } from "yamux-js";
@@ -14,10 +15,16 @@ export class PortForwarder {
 	private logger: Logger;
 	private yamuxSession: Client;
 	private servers: Map<number | string, net.Server>;
+	private childProc: ChildProcessWithoutNullStreams;
 
-	private constructor(options: PortForwarderOptions, yamuxSession: Client) {
+	private constructor(
+		options: PortForwarderOptions,
+		yamuxSession: Client,
+		childProc: ChildProcessWithoutNullStreams,
+	) {
 		this.logger = options.logger;
 		this.servers = new Map();
+		this.childProc = childProc;
 		this.yamuxSession = yamuxSession;
 		this.yamuxSession.onIncomingStream = this.handleIncomingStream;
 	}
@@ -30,7 +37,7 @@ export class PortForwarder {
 	) {
 		const childProc = childProcSetup(options.logger, cmd, args, cwd);
 		const yamuxSession = await getYamuxSession(options.logger, childProc);
-		return new PortForwarder(options, yamuxSession);
+		return new PortForwarder(options, yamuxSession, childProc);
 	}
 
 	private handleIncomingStream = (stream: Stream): void => {
@@ -156,5 +163,79 @@ export class PortForwarder {
 		const portToTry =
 			_params.localPort ?? ("remotePort" in _params ? _params.remotePort : 0);
 		return tryListen(portToTry);
+	}
+
+	async removePort(_params: ForwardPortParams): Promise<void> {
+		const key: number | string =
+			"remotePort" in _params ? _params.remotePort : _params.remoteUnixPath;
+		const destination =
+			"remotePort" in _params
+				? `TCP_PORT: ${_params.remotePort}`
+				: `UNIX_PATH: ${_params.remoteUnixPath}`;
+		const server = this.servers.get(key);
+
+		if (!server) {
+			this.logger.info(`No tcpServer found for ${destination}`);
+			return;
+		}
+
+		return new Promise((resolve, reject) => {
+			server.close((err) => {
+				if (err) {
+					this.logger.error(
+						`Error closing tcpServer for ${destination}: ${err.message}`,
+					);
+					reject(err);
+				} else {
+					this.logger.info(`tcpServer closed for ${destination}`);
+					this.servers.delete(key);
+					resolve();
+				}
+			});
+		});
+	}
+
+	async destroy(): Promise<void> {
+		this.logger.info("Closing PortForwarder & Cleaning Up...");
+
+		// Close all servers
+		const closePromises = Array.from(this.servers.entries()).map(
+			([key, server]) =>
+				new Promise<void>((resolve) => {
+					server.close((err) => {
+						if (err) {
+							this.logger.error(
+								`Error closing tcpServer for ${key}: ${err.message}`,
+							);
+						} else {
+							this.logger.info(`tcpServer closed for ${key}`);
+						}
+						resolve();
+					});
+				}),
+		);
+
+		await Promise.all(closePromises);
+		this.servers.clear();
+
+		// Close yamux session
+		try {
+			this.yamuxSession.close();
+			this.logger.info("Bidirectional pipe's session closed");
+		} catch (err) {
+			this.logger.error(
+				`Error closing Bidirectional pipe's session: ${err instanceof Error ? err.message : String(err)}`,
+			);
+		}
+
+		// Kill child process
+		try {
+			this.childProc.kill();
+			this.logger.info("Child process killed");
+		} catch (err) {
+			this.logger.error(
+				`Error killing child process: ${err instanceof Error ? err.message : String(err)}`,
+			);
+		}
 	}
 }
