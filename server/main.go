@@ -46,6 +46,10 @@ func main() {
 		}
 	}()
 
+	// Start port detector
+	portDetector := newPortDetector(5*time.Second, logger)
+	go portDetector.Start()
+
 	// Select loop to coordinate events
 	for {
 		select {
@@ -59,6 +63,10 @@ func main() {
 			}
 			logger.Info().Msg("Server Shutting down")
 			return
+
+		case port := <-portDetector.portCh:
+			logger.Info().Msgf("Port detected: %d, opening outbound stream", port)
+			go portDetector.NotifyClient(session, port)
 
 		case sig := <-sigChan:
 			logger.Info().Msgf("Received signal %v, shutting down", sig)
