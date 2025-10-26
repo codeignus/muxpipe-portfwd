@@ -1,6 +1,8 @@
 package main
 
 import (
+	"flag"
+	"fmt"
 	"io"
 	"os"
 	"os/signal"
@@ -14,15 +16,35 @@ import (
 var logger zerolog.Logger
 
 func init() {
-	logger = zerolog.New(os.Stderr).
+	var logFile string
+	flag.StringVar(&logFile, "log-file", "", "Path to log file (if not specified, logs to stderr)")
+	flag.Parse()
+
+	var logWriter io.Writer = os.Stderr
+	if logFile != "" {
+		file, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+		if err != nil {
+			// Print error to stderr and exit
+			fmt.Fprintf(os.Stderr, "Error: Failed to open log file %s: %v\n", logFile, err)
+			os.Exit(1)
+		}
+		logWriter = file
+	}
+
+	logger = zerolog.New(logWriter).
 		With().
 		Timestamp().
 		Str("source", "server").
 		Logger()
+
+	if logFile != "" {
+		// Inform about log file location on stderr
+		fmt.Fprintf(os.Stderr, "Collecting server logs at file: %s\n", logFile)
+	}
 }
 
 func main() {
-	logger.Info().Msg("Starting server...")
+	logger.Info().Msg("Starting server")
 
 	// Handle graceful shutdown
 	sigChan := make(chan os.Signal, 1)
@@ -50,26 +72,29 @@ func main() {
 	portDetector := newPortDetector(2*time.Second, logger)
 	go portDetector.Start()
 
+	// Both event loops started above
+	logger.Debug().Msg("Event loop started, waiting for streams and port detections")
+
 	// Select loop to coordinate events
 	for {
 		select {
 		case stream := <-streamChan:
-			logger.Info().Msg("New stream accepted")
+			logger.Info().Uint32("streamId", stream.StreamID()).Msg("Stream accepted, starting handler")
 			go handleIncomingStream(stream)
 
 		case err := <-streamErrChan:
 			if err != io.EOF {
 				logger.Error().Err(err).Msg("Error accepting stream")
 			}
-			logger.Info().Msg("Server Shutting down")
+			logger.Info().Msg("Server shutting down")
 			return
 
 		case port := <-portDetector.portCh:
-			logger.Info().Msgf("Port detected: %d, opening outbound stream", port)
+			logger.Info().Int("port", port).Msg("Port detected, notifying client")
 			go portDetector.NotifyClient(session, port)
 
 		case sig := <-sigChan:
-			logger.Info().Msgf("Received signal %v, shutting down", sig)
+			logger.Info().Str("signal", sig.String()).Msg("Received shutdown signal")
 			return
 		}
 	}
@@ -79,7 +104,9 @@ func createYamuxSession() *yamux.Session {
 	config := yamux.DefaultConfig()
 	config.EnableKeepAlive = true
 	config.KeepAliveInterval = 30 * time.Second // Optional but good
-	config.LogOutput = os.Stderr
+	config.LogOutput = logger
+
+	logger.Debug().Dur("keepAliveInterval", config.KeepAliveInterval).Msg("Yamux config initialized")
 
 	// Wrap stdin/stdout as a ReadWriteCloser
 	stdio := &stdioConn{
@@ -90,21 +117,21 @@ func createYamuxSession() *yamux.Session {
 	// Create a Yamux server session
 	session, err := yamux.Server(stdio, config)
 	if err != nil {
-		logger.Fatal().Err(err).Msg("Failed to initialize Session")
+		logger.Fatal().Err(err).Msg("Failed to initialize yamux session")
 	}
 
-	logger.Info().Msg("Session is created & Server is ready to accept streams")
+	logger.Trace().Msg("Yamux session created, verifying client readiness")
 
 	// Wait for client to be ready by pinging
 	for i := range 100 {
 		time.Sleep(20 * time.Millisecond)
 		_, err := session.Ping()
 		if err == nil {
-			logger.Info().Msg("Client session verified ready via ping")
+			logger.Debug().Int("attempts", i+1).Msg("Successfully pinged the client")
 			break
 		}
 		if i == 99 {
-			logger.Fatal().Err(err).Msg("Failed to verify client readiness via ping")
+			logger.Fatal().Err(err).Msg("Client failed to respond to ping")
 		}
 	}
 

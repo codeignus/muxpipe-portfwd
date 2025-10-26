@@ -70,6 +70,7 @@ func (p *PortDetector) ReadListening() ([]int, error) {
 		portHex := parts[1]
 		port, err := strconv.ParseInt(portHex, 16, 32)
 		if err != nil {
+			p.logger.Debug().Str("portHex", portHex).Msg("Failed to parse port hex")
 			continue
 		}
 
@@ -85,6 +86,8 @@ func (p *PortDetector) ReadListening() ([]int, error) {
 
 // DetectExisting scans for existing listening ports on startup
 func (p *PortDetector) DetectExisting() {
+	p.logger.Debug().Msg("Starting initial port scan")
+
 	ports, err := p.ReadListening()
 	if err != nil {
 		p.logger.Error().Err(err).Msg("Failed initial port scan")
@@ -97,7 +100,7 @@ func (p *PortDetector) DetectExisting() {
 		p.portCh <- port
 	}
 
-	p.logger.Info().Int("count", len(p.knownPorts)).Msg("Initial scan complete")
+	p.logger.Info().Int("count", len(p.knownPorts)).Msg("Initial port scan complete")
 }
 
 // watchForNewPorts monitors for new listening ports periodically
@@ -105,14 +108,18 @@ func (p *PortDetector) WatchNew() {
 	ticker := time.NewTicker(p.interval)
 	defer ticker.Stop()
 
+	p.logger.Debug().Dur("interval", p.interval).Msg("Port watcher started")
+
 	for range ticker.C {
 		ports, err := p.ReadListening()
 		if err != nil {
-			p.logger.Error().Err(err).Msg("Failed to detect ports")
+			p.logger.Error().Err(err).Msg("Failed to scan ports")
 			continue
 		}
 
 		currentPorts := make(map[int]struct{})
+		newPortCount := 0
+
 		for _, port := range ports {
 			currentPorts[port] = struct{}{}
 
@@ -120,7 +127,12 @@ func (p *PortDetector) WatchNew() {
 			if _, exists := p.knownPorts[port]; !exists {
 				p.logger.Info().Int("port", port).Msg("New port detected")
 				p.portCh <- port
+				newPortCount++
 			}
+		}
+
+		if newPortCount > 0 {
+			p.logger.Debug().Int("newPorts", newPortCount).Int("totalPorts", len(currentPorts)).Msg("Port scan completed")
 		}
 
 		// Update known ports
@@ -138,10 +150,12 @@ func (p *PortDetector) Start() {
 func (p *PortDetector) NotifyClient(session *yamux.Session, port int) {
 	stream, err := session.OpenStream()
 	if err != nil {
-		p.logger.Error().Err(err).Int("port", port).Msg("Failed to open stream")
+		p.logger.Error().Err(err).Int("port", port).Msg("Failed to open notification stream")
 		return
 	}
 	defer stream.Close()
+
+	p.logger.Debug().Int("port", port).Uint32("streamId", stream.StreamID()).Msg("Opened notification stream")
 
 	// Send port notification to client
 	message := map[string]int{
@@ -150,9 +164,9 @@ func (p *PortDetector) NotifyClient(session *yamux.Session, port int) {
 
 	encoder := json.NewEncoder(stream)
 	if err := encoder.Encode(message); err != nil {
-		p.logger.Error().Err(err).Int("port", port).Msg("Failed to encode port detected notification message")
+		p.logger.Error().Err(err).Int("port", port).Msg("Failed to encode notification message")
 		return
 	}
 
-	p.logger.Info().Int("port", port).Msg("Notified client about new port")
+	p.logger.Info().Int("port", port).Uint32("streamId", stream.StreamID()).Msg("Client notified")
 }

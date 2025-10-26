@@ -27,6 +27,8 @@ export class PortForwarder {
 		this.childProc = childProc;
 		this.yamuxSession = yamuxSession;
 		this.yamuxSession.onIncomingStream = this.handleIncomingStream;
+
+		this.logger.info("PortForwarder initialized successfully");
 	}
 
 	static async _init(
@@ -35,13 +37,15 @@ export class PortForwarder {
 		args?: string[],
 		cwd?: string,
 	) {
+		options.logger.trace("Setting up child process");
 		const childProc = childProcSetup(options.logger, cmd, args, cwd);
+		options.logger.trace("Establishing yamux session");
 		const yamuxSession = await getYamuxSession(options.logger, childProc);
 		return new PortForwarder(options, yamuxSession, childProc);
 	}
 
 	private handleIncomingStream = (stream: Stream): void => {
-		this.logger.info(
+		this.logger.trace(
 			`Incoming stream accepted from server (ID: ${stream.ID()})`,
 		);
 
@@ -50,7 +54,7 @@ export class PortForwarder {
 		});
 
 		stream.on("close", () => {
-			this.logger.info(`[Stream ${stream.ID()}] closed`);
+			this.logger.debug(`[Stream ${stream.ID()}] closed`);
 		});
 
 		const chunks: Buffer[] = [];
@@ -64,8 +68,8 @@ export class PortForwarder {
 				const message = JSON.parse(data);
 
 				if (message.port && typeof message.port === "number") {
-					this.logger.info(
-						`Port detected notification received: ${message.port}`,
+					this.logger.trace(
+						`Port detection notification received: ${message.port}`,
 					);
 					const localPort = await this.addPort({ remotePort: message.port });
 					this.logger.info(
@@ -86,6 +90,7 @@ export class PortForwarder {
 			"remotePort" in _params
 				? `TCP_PORT: ${_params.remotePort}`
 				: `UNIX_PATH: ${_params.remoteUnixPath}`;
+		this.logger.debug(`Adding port forward for ${destination}`);
 		const message:
 			| { type: "tcp"; port: number }
 			| { type: "unix"; path: string } =
@@ -94,9 +99,12 @@ export class PortForwarder {
 				: { type: "unix", path: _params.remoteUnixPath };
 
 		const connectionHandler = async (socket: net.Socket) => {
-			this.logger.info(`Opening stream for remote ${destination}`);
+			this.logger.trace(`New connection received for ${destination}`);
 			// Open a new yamux stream
 			const stream = await this.yamuxSession.openStream();
+			this.logger.trace(
+				`Stream opened (ID: ${stream.ID()}) for ${destination}`,
+			);
 
 			// Handle errors
 			stream.on("error", (err) => {
@@ -119,6 +127,9 @@ export class PortForwarder {
 			// Wait for server to acknowledge it's mirror in go: stream.Write([]byte("OK")) to avoid racing between pipe and first message
 			// Now it only sets pipe after server sends acknowledgement and data is buffered not lost until then
 			stream.once("data", () => {
+				this.logger.trace(
+					`Server acknowledged, piping data for ${destination}`,
+				);
 				// Now pipe, set up bidirectional forwarding
 				socket.pipe(stream).pipe(socket);
 			});
@@ -135,7 +146,9 @@ export class PortForwarder {
 
 				server.on("error", (err: NodeJS.ErrnoException) => {
 					if (err.code === "EADDRINUSE" && !_params.localPort && port !== 0) {
-						this.logger.info(`Port ${port} already in use, trying random port`);
+						this.logger.debug(
+							`Port ${port} already in use, trying random port`,
+						);
 						resolve(tryListen(0));
 					} else {
 						this.logger.error(
@@ -148,7 +161,9 @@ export class PortForwarder {
 				server.listen(port, "127.0.0.1", () => {
 					const serverListeningOnPort = (server.address() as net.AddressInfo)
 						.port;
-					this.logger.info(`Listening on 127.0.0.1:${serverListeningOnPort}`);
+					this.logger.info(
+						`Port forward established: 127.0.0.1:${serverListeningOnPort} -> ${destination}`,
+					);
 					this.servers.set(
 						"remotePort" in _params
 							? _params.remotePort
@@ -172,10 +187,11 @@ export class PortForwarder {
 			"remotePort" in _params
 				? `TCP_PORT: ${_params.remotePort}`
 				: `UNIX_PATH: ${_params.remoteUnixPath}`;
+		this.logger.debug(`Removing port forward for ${destination}`);
 		const server = this.servers.get(key);
 
 		if (!server) {
-			this.logger.info(`No tcpServer found for ${destination}`);
+			this.logger.warn(`No tcpServer found for ${destination}`);
 			return;
 		}
 
@@ -196,7 +212,7 @@ export class PortForwarder {
 	}
 
 	async destroy(): Promise<void> {
-		this.logger.info("Closing PortForwarder & Cleaning Up...");
+		this.logger.info("Destroying PortForwarder, cleaning up resources");
 
 		// Close all servers
 		const closePromises = Array.from(this.servers.entries()).map(
@@ -208,7 +224,7 @@ export class PortForwarder {
 								`Error closing tcpServer for ${key}: ${err.message}`,
 							);
 						} else {
-							this.logger.info(`tcpServer closed for ${key}`);
+							this.logger.debug(`tcpServer closed for ${key}`);
 						}
 						resolve();
 					});
@@ -217,6 +233,7 @@ export class PortForwarder {
 
 		await Promise.all(closePromises);
 		this.servers.clear();
+		this.logger.info("All tcpServers closed");
 
 		// Close yamux session
 		try {

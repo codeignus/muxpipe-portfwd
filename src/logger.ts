@@ -5,8 +5,8 @@ export interface Logger {
 	info(message: string, ...args: any[]): void;
 	warn(message: string, ...args: any[]): void;
 	error(error: string | Error, ...args: any[]): void;
-	debug?(message: string, ...args: any[]): void;
-	trace?(message: string, ...args: any[]): void;
+	debug(message: string, ...args: any[]): void;
+	trace(message: string, ...args: any[]): void;
 }
 
 const timestamp = () => {
