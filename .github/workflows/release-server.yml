@@ -1,9 +1,9 @@
-name: Release muxpipe-portfwd-server
+name: Release muxpipe-portfwd server binary
 
 on:
   push:
     tags:
-      - "v*"
+      - "server/v*"
     # branches:
     #   - main
     # paths:
@@ -32,7 +32,7 @@ jobs:
 
       - name: Set Go env variables and build
         run: |
-          GOOS=linux GOARCH=${{ matrix.arch }} go build -o muxpipe-portfwd-server .
+          GOOS=linux GOARCH=${{ matrix.arch }} go build -o muxpipe-portfwd .
 
       - name: Compress binary and define archive name
         run: |
@@ -44,8 +44,8 @@ jobs:
             arch_name="${{ matrix.arch }}"
           fi
 
-          archive_name="muxpipe-portfwd-server-linux-$arch_name.tar.gz"
-          tar czf $archive_name muxpipe-portfwd-server
+          archive_name="muxpipe-portfwd-linux-$arch_name.tar.gz"
+          tar czf $archive_name muxpipe-portfwd
 
           echo "ARCHIVE=$archive_name" >> $GITHUB_ENV
 
