@@ -12,7 +12,13 @@ export async function getYamuxSession(
 	childProc: ChildProcessWithoutNullStreams,
 ) {
 	logger.trace("Creating yamux client session");
-	const yamuxSession = new Client();
+	// Configure yamux with increased timeouts for stdio-based connections
+	// Stdio pipes can experience backpressure, requiring generous timeouts
+	const yamuxSession = new Client({
+		enableKeepAlive: true,
+		keepAliveInterval: 30, // seconds
+		connectionWriteTimeout: 60, // 1 minutes in seconds
+	});
 	childProc.stdout.pipe(yamuxSession).pipe(childProc.stdin);
 	logger.trace("Bidirectional pipe established between client and server");
 

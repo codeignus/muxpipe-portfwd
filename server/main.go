@@ -103,10 +103,17 @@ func main() {
 func createYamuxSession() *yamux.Session {
 	config := yamux.DefaultConfig()
 	config.EnableKeepAlive = true
-	config.KeepAliveInterval = 30 * time.Second // Optional but good
+	config.KeepAliveInterval = 30 * time.Second
+	// Increase timeout significantly for stdio-based connections
+	// Stdio pipes can experience backpressure, so we need generous timeouts
+	config.ConnectionWriteTimeout = 1 * time.Minute
 	config.LogOutput = logger
 
-	logger.Debug().Dur("keepAliveInterval", config.KeepAliveInterval).Msg("Yamux config initialized")
+	logger.Debug().
+		Bool("keepAliveEnabled", config.EnableKeepAlive).
+		Dur("keepAliveInterval", config.KeepAliveInterval).
+		Dur("connectionWriteTimeout", config.ConnectionWriteTimeout).
+		Msg("Yamux config initialized")
 
 	// Wrap stdin/stdout as a ReadWriteCloser
 	stdio := &stdioConn{

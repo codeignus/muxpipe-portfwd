@@ -36,15 +36,7 @@ jobs:
 
       - name: Compress binary and define archive name
         run: |
-          if [ "${{ matrix.arch }}" = "amd64" ]; then
-            arch_name="x64"
-          elif [ "${{ matrix.arch }}" = "arm64" ]; then
-            arch_name="arm64"
-          else
-            arch_name="${{ matrix.arch }}"
-          fi
-
-          archive_name="muxpipe-portfwd-linux-$arch_name.tar.gz"
+          archive_name="muxpipe-portfwd-linux-${{ matrix.arch }}.tar.gz"
           tar czf $archive_name muxpipe-portfwd
 
           echo "ARCHIVE=$archive_name" >> $GITHUB_ENV
