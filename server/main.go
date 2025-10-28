@@ -68,12 +68,8 @@ func main() {
 		}
 	}()
 
-	// Start port detector
-	portDetector := newPortDetector(2*time.Second, logger)
-	go portDetector.Start()
-
 	// Both event loops started above
-	logger.Debug().Msg("Event loop started, waiting for streams and port detections")
+	logger.Debug().Msg("Event loop started, waiting for streams")
 
 	// Select loop to coordinate events
 	for {
@@ -88,10 +84,6 @@ func main() {
 			}
 			logger.Info().Msg("Server shutting down")
 			return
-
-		case port := <-portDetector.portCh:
-			logger.Info().Int("port", port).Msg("Port detected, notifying client")
-			go portDetector.NotifyClient(session, port)
 
 		case sig := <-sigChan:
 			logger.Info().Str("signal", sig.String()).Msg("Received shutdown signal")

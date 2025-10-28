@@ -1,7 +1,7 @@
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import * as net from "node:net";
 
-import type { Client, Stream } from "yamux-js";
+import type { Client } from "yamux-js";
 
 import type { PortForwarderOptions } from "./index.js";
 import type { Logger } from "./logger.js";
@@ -26,7 +26,6 @@ export class PortForwarder {
 		this.servers = new Map();
 		this.childProc = childProc;
 		this.yamuxSession = yamuxSession;
-		this.yamuxSession.onIncomingStream = this.handleIncomingStream;
 
 		this.logger.info("PortForwarder initialized successfully");
 	}
@@ -43,47 +42,6 @@ export class PortForwarder {
 		const yamuxSession = await getYamuxSession(options.logger, childProc);
 		return new PortForwarder(options, yamuxSession, childProc);
 	}
-
-	private handleIncomingStream = (stream: Stream): void => {
-		this.logger.trace(
-			`Incoming stream accepted from server (ID: ${stream.ID()})`,
-		);
-
-		stream.on("error", (err: Error) => {
-			this.logger.error(`[Stream ${stream.ID()}] error: ${err.message}`);
-		});
-
-		stream.on("close", () => {
-			this.logger.debug(`[Stream ${stream.ID()}] closed`);
-		});
-
-		const chunks: Buffer[] = [];
-		stream.on("data", (chunk: Buffer) => {
-			chunks.push(chunk);
-		});
-
-		stream.on("end", async () => {
-			try {
-				const data = Buffer.concat(chunks).toString("utf-8");
-				const message = JSON.parse(data);
-
-				if (message.port && typeof message.port === "number") {
-					this.logger.trace(
-						`Port detection notification received: ${message.port}`,
-					);
-					const localPort = await this.addPort({ remotePort: message.port });
-					this.logger.info(
-						`Auto-forwarded port ${message.port} to local port ${localPort}`,
-					);
-				}
-			} catch (err) {
-				// Not valid JSON or parsing error
-				this.logger.error(
-					`[Stream ${stream.ID()}] Could not parse message: ${err instanceof Error ? err.message : String(err)}`,
-				);
-			}
-		});
-	};
 
 	async addPort(_params: ForwardPortParams): Promise<number> {
 		const destination =
