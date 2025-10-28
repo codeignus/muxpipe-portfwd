@@ -32,10 +32,13 @@ jobs:
 
       - name: Set Go env variables and build
         run: |
-          GOOS=linux GOARCH=${{ matrix.arch }} go build -o muxpipe-portfwd .
+          GOOS=linux GOARCH=${{ matrix.arch }} go build -o server .
 
       - name: Compress binary and define archive name
         run: |
+          mkdir -p muxpipe-portfwd           # this will be the folder inside tarball
+          cp server muxpipe-portfwd/  # copy binary inside
+
           archive_name="muxpipe-portfwd-linux-${{ matrix.arch }}.tar.gz"
           tar czf $archive_name muxpipe-portfwd
 
