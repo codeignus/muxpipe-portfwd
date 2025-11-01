@@ -1,3 +1,4 @@
+import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
 import * as net from "node:net";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -9,6 +10,7 @@ describe("Destroy", () => {
 	let forwarder: PortForwarder;
 	let remotePort: number;
 	let server: net.Server;
+	let childProc: ChildProcessWithoutNullStreams;
 
 	beforeEach(async () => {
 		// Create a simple TCP echo server
@@ -26,11 +28,18 @@ describe("Destroy", () => {
 		});
 
 		// Start the port forwarder
-		const cmd = "go";
-		const args = ["run", "."];
-		const cwd = "server";
+		childProc = spawn("go", ["run", "."], { cwd: "server", stdio: "pipe" });
 
-		forwarder = await portForwarder({ cmd, args, cwd });
+		// Handle spawn errors
+		childProc.on("error", (err) => {
+			throw new Error(`Failed to spawn process: ${err.message}`);
+		});
+
+		forwarder = await portForwarder({
+			stdin: childProc.stdin,
+			stdout: childProc.stdout,
+			stderr: childProc.stderr,
+		});
 	});
 
 	it("should destroy forwarder and clean up resources", async () => {

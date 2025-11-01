@@ -1,11 +1,10 @@
-import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import * as net from "node:net";
 
 import type { Client } from "yamux-js";
 
 import type { PortForwarderOptions } from "./index.js";
 import type { Logger } from "./logger.js";
-import { childProcSetup, getYamuxSession } from "./stdioPipe.js";
+import { getYamuxSession, type StdioStreams, stdioSetup } from "./stdioPipe.js";
 
 type ForwardPortParams =
 	| { localPort?: number; remotePort: number; remoteUnixPath?: never }
@@ -15,32 +14,27 @@ export class PortForwarder {
 	private logger: Logger;
 	private yamuxSession: Client;
 	private servers: Map<number | string, net.Server>;
-	private childProc: ChildProcessWithoutNullStreams;
+	private stdio: StdioStreams;
 
 	private constructor(
 		options: PortForwarderOptions,
 		yamuxSession: Client,
-		childProc: ChildProcessWithoutNullStreams,
+		stdio: StdioStreams,
 	) {
 		this.logger = options.logger;
 		this.servers = new Map();
-		this.childProc = childProc;
+		this.stdio = stdio;
 		this.yamuxSession = yamuxSession;
 
 		this.logger.info("PortForwarder initialized successfully");
 	}
 
-	static async _init(
-		options: PortForwarderOptions,
-		cmd: string,
-		args?: string[],
-		cwd?: string,
-	) {
-		options.logger.trace("Setting up child process");
-		const childProc = childProcSetup(options.logger, cmd, args, cwd);
+	static async _init(options: PortForwarderOptions, stdio: StdioStreams) {
+		options.logger.trace("Setting up stdio streams");
+		const stdioStreams = stdioSetup(options.logger, stdio);
 		options.logger.trace("Establishing yamux session");
-		const yamuxSession = await getYamuxSession(options.logger, childProc);
-		return new PortForwarder(options, yamuxSession, childProc);
+		const yamuxSession = await getYamuxSession(options.logger, stdioStreams);
+		return new PortForwarder(options, yamuxSession, stdioStreams);
 	}
 
 	async addPort(_params: ForwardPortParams): Promise<number> {
@@ -203,13 +197,15 @@ export class PortForwarder {
 			);
 		}
 
-		// Kill child process
+		// Close stdio streams
 		try {
-			this.childProc.kill();
-			this.logger.info("Child process killed");
+			if (this.stdio.stdin.writable) {
+				this.stdio.stdin.end();
+			}
+			this.logger.info("Stdio streams closed");
 		} catch (err) {
 			this.logger.error(
-				`Error killing child process: ${err instanceof Error ? err.message : String(err)}`,
+				`Error closing stdio streams: ${err instanceof Error ? err.message : String(err)}`,
 			);
 		}
 	}

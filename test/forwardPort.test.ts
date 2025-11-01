@@ -1,3 +1,4 @@
+import { spawn } from "node:child_process";
 import * as net from "node:net";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -26,11 +27,16 @@ describe("ForwardPort", () => {
 		});
 
 		// 2️⃣ Start the port forwarder
-		const cmd = "go";
-		const args = ["run", "."];
-		const cwd = "server";
+		const childProc = spawn("go", ["run", "."], {
+			cwd: "server",
+			stdio: "pipe",
+		});
 
-		forwarder = await portForwarder({ cmd, args, cwd });
+		forwarder = await portForwarder({
+			stdin: childProc.stdin,
+			stdout: childProc.stdout,
+			stderr: childProc.stderr,
+		});
 	});
 
 	it("should forward tcp port and avoid racing issues", async () => {

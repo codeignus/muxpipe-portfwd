@@ -1,6 +1,6 @@
 {
 	"name": "muxpipe-portfwd",
-	"version": "0.1.0-pre",
+	"version": "0.1.2-pre",
 	"repository": {
 		"type": "git",
 		"url": "https://github.com/codeignus/muxpipe-portfwd.git"
@@ -24,6 +24,8 @@
 		"format": "pnpm biome format --write",
 		"format:check": "pnpm biome format",
 		"prepare": "pnpm format:check && pnpm lint && pnpm build",
+		"check-types": "tsc --noEmit",
+		"prelint": "pnpm check-types",
 		"lint": "pnpm biome lint",
 		"test": "vitest run",
 		"test:watch": "vitest watch"

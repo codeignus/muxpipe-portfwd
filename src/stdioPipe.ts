@@ -1,16 +1,19 @@
-import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
+import type { Readable, Writable } from "node:stream";
 
 import { Client } from "yamux-js";
 
 import type { Logger } from "./logger";
 
+export type StdioStreams = {
+	stdin: Writable;
+	stdout: Readable;
+	stderr: Readable;
+};
+
 /**
  * asynchronus so that it blocks until server is ready
  */
-export async function getYamuxSession(
-	logger: Logger,
-	childProc: ChildProcessWithoutNullStreams,
-) {
+export async function getYamuxSession(logger: Logger, stdio: StdioStreams) {
 	logger.trace("Creating yamux client session");
 	// Configure yamux with increased timeouts for stdio-based connections
 	// Stdio pipes can experience backpressure, requiring generous timeouts
@@ -19,7 +22,7 @@ export async function getYamuxSession(
 		keepAliveInterval: 30, // seconds
 		connectionWriteTimeout: 60, // 1 minutes in seconds
 	});
-	childProc.stdout.pipe(yamuxSession).pipe(childProc.stdin);
+	stdio.stdout.pipe(yamuxSession).pipe(stdio.stdin);
 	logger.trace("Bidirectional pipe established between client and server");
 
 	yamuxSession.on("error", (err) => {
@@ -49,44 +52,24 @@ export async function getYamuxSession(
 	return yamuxSession;
 }
 
-export function childProcSetup(
-	logger: Logger,
-	cmd: string,
-	args?: string[],
-	cwd?: string,
-) {
-	logger.debug(`Spawning child process: ${cmd}`, { args, cwd });
-	const childProc = spawn(cmd, args, { cwd, stdio: "pipe" });
-	logger.trace(`Child process spawned with PID: ${childProc.pid}`);
+export function stdioSetup(logger: Logger, stdio: StdioStreams) {
+	logger.trace("Setting up stdio stream handlers");
 
-	childProc.on("error", (err) => {
-		logger.error(`Command failed: ${err.message}`);
-	});
-	childProc.on("exit", (code, signal) => {
-		if (code === 0) {
-			logger.debug(`Command exited successfully`);
-		} else if (signal) {
-			logger.error(`Command killed by signal: ${signal}`);
-		} else {
-			logger.error(`Command exited with error code: ${code}`);
-		}
+	stdio.stdin.on("error", (err) => {
+		logger.error(`Stdin error: ${err.message}`);
 	});
 
-	childProc.stdin.on("error", (err) => {
-		logger.error(`Command process Stdin error: ${err.message}`);
+	stdio.stdout.on("error", (err) => {
+		logger.error(`Stdout error: ${err.message}`);
 	});
 
-	childProc.stdout.on("error", (err) => {
-		logger.error(`Command process Stdout error: ${err.message}`);
+	stdio.stderr.on("error", (err) => {
+		logger.error(`Stderr error: ${err.message}`);
 	});
 
-	childProc.stderr.on("error", (err) => {
-		logger.error(`Command process Stderr error: ${err.message}`);
-	});
-
-	childProc.stderr.on("data", (data) => {
+	stdio.stderr.on("data", (data) => {
 		logger.info(data.toString());
 	});
 
-	return childProc;
+	return stdio;
 }

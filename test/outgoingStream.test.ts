@@ -1,3 +1,5 @@
+import { spawn } from "node:child_process";
+
 import { beforeEach, describe, expect, it } from "vitest";
 import type { Client } from "yamux-js";
 
@@ -7,11 +9,15 @@ describe("OutgoingStream", () => {
 	let yamuxSession: Client;
 
 	beforeEach(async () => {
-		const cmd = "go";
-		const args = ["run", "."];
-		const cwd = "server";
-
-		const forwarder = await portForwarder({ cmd, args, cwd });
+		const childProc = spawn("go", ["run", "."], {
+			cwd: "server",
+			stdio: "pipe",
+		});
+		const forwarder = await portForwarder({
+			stdin: childProc.stdin,
+			stdout: childProc.stdout,
+			stderr: childProc.stderr,
+		});
 		expect(forwarder).toBeTruthy();
 
 		// biome-ignore lint/suspicious/noExplicitAny: <Accessing private property for testing purposes>
